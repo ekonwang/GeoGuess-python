@@ -3,6 +3,8 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd -- "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
 PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+MAIN_PROJECT_TEMP=$(cd $PROJECT_DIR/../../../.temp && pwd)
+# echo ${MAIN_PROJECT_TEMP}
 
 # activate the gpt-researcher conda environment
 eval "$(conda shell.bash hook)"
@@ -29,10 +31,11 @@ if [[ -z "${GOOGLE_MAPS_API_KEY:-}" ]]; then
   exit 1
 fi
 
-# Forward any CLI args to the Python script
-python "$SCRIPT_DIR/get_panorama.py" \
+
+python "$SCRIPT_DIR/batch_panorama.py" \
   --app-base-url "$APP_BASE_URL" \
   --google-api-key "$GOOGLE_MAPS_API_KEY" \
   --max-attempts 10 \
-  --city "New York" \
+  --num_query 2000 \
+  --batch_out_dir ${MAIN_PROJECT_TEMP}/datasets/google_javascript_maps
   "$@" 

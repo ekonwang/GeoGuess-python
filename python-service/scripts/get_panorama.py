@@ -5,6 +5,7 @@ import argparse
 import os
 import sys
 from typing import Any, Dict, Optional
+from streetview import get_panorama
 
 import requests
 
@@ -32,18 +33,6 @@ def build_parser() -> argparse.ArgumentParser:
         "--country",
         default=None,
         help="Country code or name to disambiguate city (e.g. CN)",
-    )
-    parser.add_argument(
-        "--width",
-        type=int,
-        default=640,
-        help="Image width (default: 640)",
-    )
-    parser.add_argument(
-        "--height",
-        type=int,
-        default=640,
-        help="Image height (default: 640)",
     )
     parser.add_argument(
         "--heading",
@@ -87,6 +76,17 @@ def build_parser() -> argparse.ArgumentParser:
         default="panorama.png",
         help="Output PNG filepath (default: panorama.png)",
     )
+    parser.add_argument(
+        "--num_query",
+        default=2000,
+        type=int,
+        help="Number of queries to make (default: 1000)",
+    )
+    parser.add_argument(
+        "--batch_out_dir",
+        required=True,
+        help="Output directory (default: panorama_batch)",
+    )
     return parser
 
 
@@ -116,8 +116,6 @@ def request_random_panorama(
 def download_streetview_png(
     *,
     api_key: str,
-    width: int,
-    height: int,
     lat: float,
     lng: float,
     pano_id: Optional[str],
@@ -125,46 +123,37 @@ def download_streetview_png(
     pitch: float,
     fov: float,
     output: str,
+    zoom: int = 3,
 ):
-    params: Dict[str, Any] = {
-        "size": f"{width}x{height}",
-        "key": api_key,
-        "pitch": pitch,
-        "fov": fov,
-    }
-    if heading is not None:
-        params["heading"] = heading
+    try:
+        panorama = get_panorama(pano_id, multi_threaded=False, zoom=zoom)
+    except Exception as e:
+        print(f"Error downloading panorama: {e}")
+        return False
 
-    if pano_id:
-        params["pano"] = pano_id
-    else:
-        params["location"] = f"{lat},{lng}"
-
-    url = "https://maps.googleapis.com/maps/api/streetview"
-    r = requests.get(url, params=params, timeout=60)
-    r.raise_for_status()
-
-    with open(output, "wb") as f:
-        f.write(r.content)
+    os.makedirs(os.path.dirname(output), exist_ok=True)
+    panorama.save(output, format="PNG")
+    return True
 
 
-def main(argv: Optional[list[str]] = None) -> int:
-    parser = build_parser()
-    args = parser.parse_args(argv)
-
+def request_pano_pipeline(args) -> int:
     if not args.google_api_key:
         print("ERROR: --google-api-key not provided and GOOGLE_MAPS_API_KEY not set", file=sys.stderr)
         return 2
 
     print("Requesting a random Street View location from app service...")
-    result = request_random_panorama(
-        args.app_base_url,
-        city=args.city,
-        country=args.country,
-        all_panorama=bool(args.all_panorama),
-        optimise=bool(args.optimise),
-        max_attempts=int(args.max_attempts),
-    )
+    try:
+        result = request_random_panorama(
+            args.app_base_url,
+            city=args.city,
+            country=args.country,
+            all_panorama=bool(args.all_panorama),
+            optimise=bool(args.optimise),
+            max_attempts=int(args.max_attempts),
+        )
+    except Exception as e:
+        print(f"Error requesting panorama: {e}")
+        return 1, None
 
     lat = float(result["latitude"])
     lng = float(result["longitude"])
@@ -174,10 +163,8 @@ def main(argv: Optional[list[str]] = None) -> int:
     print(f"Found location: lat={lat}, lng={lng}, pano_id={pano_id}")
 
     print(f"Downloading PNG to {args.output}...")
-    download_streetview_png(
+    rst = download_streetview_png(
         api_key=args.google_api_key,
-        width=int(args.width),
-        height=int(args.height),
         lat=lat,
         lng=lng,
         pano_id=pano_id,
@@ -187,9 +174,14 @@ def main(argv: Optional[list[str]] = None) -> int:
         output=str(args.output),
     )
 
-    print("Done.")
-    return 0
+    if rst:
+        print("Done.")
+        return 0, metadata
+    return 1, None
 
 
 if __name__ == "__main__":
-    raise SystemExit(main()) 
+    parser = build_parser()
+    args = parser.parse_args()
+
+    raise SystemExit(request_pano_pipeline(args)) 
