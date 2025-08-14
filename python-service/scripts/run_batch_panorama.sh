@@ -9,6 +9,7 @@ MAIN_PROJECT_TEMP=$(cd $PROJECT_DIR/../../../.temp && pwd)
 # activate the gpt-researcher conda environment
 eval "$(conda shell.bash hook)"
 conda activate gpt-researcher
+cd ${PROJECT_DIR}
 
 # 设置 SSL 以及代理
 export SSL_CERT_FILE="$(python -c 'import certifi; print(certifi.where())')"
@@ -36,6 +37,6 @@ python "$SCRIPT_DIR/batch_panorama.py" \
   --app-base-url "$APP_BASE_URL" \
   --google-api-key "$GOOGLE_MAPS_API_KEY" \
   --max-attempts 10 \
-  --num_query 2000 \
+  --num_query 500 \
   --batch_out_dir ${MAIN_PROJECT_TEMP}/datasets/google_javascript_maps
   "$@" 
