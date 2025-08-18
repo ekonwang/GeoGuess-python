@@ -7,6 +7,7 @@ import geojson
 import shapely.geometry
 import shapely.ops
 import requests
+import math
 
 from .config import NOMINATIM_BASE_URL, get_http_session
 
@@ -34,14 +35,24 @@ def _random_point_in_bounds(minx: float, miny: float, maxx: float, maxy: float) 
     return shapely.geometry.Point(x, y)
 
 
-def random_point_in_polygon(geom: GeoJSONType, max_tries: int = 10_000) -> Tuple[float, float]:
+def random_point_in_polygon(geom: GeoJSONType, max_tries: int = 10_000, center_bias: Optional[float] = None) -> Tuple[float, float]:
     shape = _to_shapely_geometry(geom)
     minx, miny, maxx, maxy = shape.bounds
-
+    centroid = shape.centroid
+    # center_bias: 标准差（米）的近似比例；值越小越靠中心，可按 bbox 尺度换算
     for _ in range(max_tries):
         pt = _random_point_in_bounds(minx, miny, maxx, maxy)
-        if shape.contains(pt):
-            return (pt.y, pt.x)  # lat, lng
+        if not shape.contains(pt):
+            continue
+        if center_bias:
+            # 距离中心越远，接受概率越低（近似高斯核）
+            d = pt.distance(centroid)
+            # bbox 尺度归一化，避免城市大小差异
+            scale = max(maxx - minx, maxy - miny)
+            accept_p = math.exp(-(d / (center_bias * scale)) ** 2 / 2.0)
+            if random.random() > accept_p:
+                continue
+        return (pt.y, pt.x)
     raise RuntimeError("Failed to sample a point inside polygon after many attempts")
 
 

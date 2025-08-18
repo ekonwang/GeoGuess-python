@@ -30,8 +30,9 @@ def main():
     # 开始 query
     for i in range(args.num_query):
         city = random.choice(cities)
-        output = os.path.join(args.batch_out_dir, str(uuid4()))
-        img_output = os.path.join(output, "panorama.png")
+        uid = str(uuid4())
+        output = os.path.join(args.batch_out_dir, uid)
+        img_output = os.path.join(output, f"panorama-{uid}.png")
 
         # 更换参数
         args.city = city
@@ -39,10 +40,10 @@ def main():
         rst = request_pano_pipeline(args)
         if rst[0] == 0:
             num_success += 1
-            metadata_output = os.path.join(output, "metadata.json")
+            metadata_output = os.path.join(output, f"metadata-{uid}.json")
             rst[1].update({"city": city})
             with open(metadata_output, "w") as f:
-                json.dump(rst[1], f, indent=4)
+                json.dump(rst[1], f, indent=4, ensure_ascii=False)
         else:
             print("Fail")
 
