@@ -9,6 +9,7 @@ import time
 import random
 from typing import Any, Dict, List, Optional, Tuple
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from tqdm import tqdm
 
 # Allow importing from sibling 'scripts' directory
 CUR_DIR = os.path.dirname(__file__)
@@ -36,7 +37,15 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--country", default=None, help="Optional single country hint to apply for all cities (e.g., 'CN')")
     parser.add_argument("--concurrency", type=int, default=2, help="Max parallel fetches (default: 2)")
     parser.add_argument("--limit", type=int, default=None, help="Limit the number of cities to process (debug)")
+    parser.add_argument("--force_overwrite", action="store_true", help="Overwrite existing cache files if present")
     return parser
+
+
+def _cache_filename_for(city: str, country: Optional[str]) -> str:
+    city_key = city.strip().lower()
+    country_key = (country or "").strip().lower()
+    base = f"{city_key},{country_key}" if country_key else city_key
+    return f"{base}.geojson"
 
 
 def _process_city(cache_dir: str, city: str, country: Optional[str]) -> Tuple[str, bool, Optional[str]]:
@@ -67,38 +76,60 @@ def main() -> int:
     parser = build_parser()
     args = parser.parse_args()
 
+    os.makedirs(args.cache_dir, exist_ok=True)
+
     print(f"[INFO] Building GeoJSON caches to '{args.cache_dir}'...")
     cities = list_gawc_city(threshold=args.threshold, strictly_higher=bool(args.strictly_higher), debug=True)
     if args.limit:
         cities = cities[: int(args.limit)]
-    print(f"[INFO] Total cities to process: {len(cities)}")
+
+    # Filter out cities that already have cache files unless force_overwrite
+    pending: List[str] = []
+    skipped: List[str] = []
+    for city in cities:
+        fname = _cache_filename_for(city, args.country)
+        fpath = os.path.join(args.cache_dir, fname)
+        if (not args.force_overwrite) and os.path.isfile(fpath):
+            skipped.append(city)
+        else:
+            pending.append(city)
+
+    print(f"[INFO] Total cities: {len(cities)} | Pending: {len(pending)} | Skipped(existing): {len(skipped)}")
 
     num_ok = 0
     num_fail = 0
 
+    if not pending:
+        print("[INFO] Nothing to do. All caches already exist (or limit filtered everything).")
+        return 0
+
     if args.concurrency <= 1:
-        for city in cities:
-            _, ok, err = _process_city(args.cache_dir, city, args.country)
-            if ok:
-                num_ok += 1
-            else:
-                num_fail += 1
-                print(f"[WARN] Failed for city='{city}': {err}")
-    else:
-        with ThreadPoolExecutor(max_workers=max(1, int(args.concurrency))) as executor:
-            futures = [executor.submit(_process_city, args.cache_dir, city, args.country) for city in cities]
-            for fut in as_completed(futures):
-                try:
-                    city, ok, err = fut.result()
-                except Exception as e:
-                    city, ok, err = ("<unknown>", False, str(e))
+        with tqdm(total=len(pending), desc="Caching") as pbar:
+            for city in pending:
+                _, ok, err = _process_city(args.cache_dir, city, args.country)
                 if ok:
                     num_ok += 1
                 else:
                     num_fail += 1
                     print(f"[WARN] Failed for city='{city}': {err}")
+                pbar.update(1)
+    else:
+        with tqdm(total=len(pending), desc=f"Caching (concurrency={args.concurrency})") as pbar:
+            with ThreadPoolExecutor(max_workers=max(1, int(args.concurrency))) as executor:
+                futures = [executor.submit(_process_city, args.cache_dir, city, args.country) for city in pending]
+                for fut in as_completed(futures):
+                    try:
+                        city, ok, err = fut.result()
+                    except Exception as e:
+                        city, ok, err = ("<unknown>", False, str(e))
+                    if ok:
+                        num_ok += 1
+                    else:
+                        num_fail += 1
+                        print(f"[WARN] Failed for city='{city}': {err}")
+                    pbar.update(1)
 
-    print(f"[INFO] Done. Success={num_ok} Fail={num_fail}")
+    print(f"[INFO] Done. Success={num_ok} Fail={num_fail} Skipped={len(skipped)}")
     return 0 if num_fail == 0 else 1
 
 
