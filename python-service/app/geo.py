@@ -10,6 +10,8 @@ import requests
 import math
 import json
 import logging
+import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from .config import NOMINATIM_BASE_URL, get_http_session
 
@@ -78,6 +80,9 @@ def fetch_city_geojson(city: str, country: Optional[str] = None, focus: Optional
     # 步骤 1：获取全市范围 polygon
     full_feature = _fetch_city_full_geojson(city, country)
     city_shape = _to_shapely_geometry(full_feature)
+    minx, miny, maxx, maxy = city_shape.bounds
+    # Nominatim: viewbox = left,top,right,bottom
+    viewbox = f"{minx},{maxy},{maxx},{miny}"
 
     # 先查缓存
     cache_key = _city_cache_key(city, country)
@@ -88,26 +93,49 @@ def fetch_city_geojson(city: str, country: Optional[str] = None, focus: Optional
 
     # 步骤 2：使用关键词查找城市中心（小 polygon/multipolygon）
     synonyms = [
-        "downtown", "city centre", "central business district", "CBD",
-        "city center", "市中心", "中心城区", "中心商務區", "中央区", "mall",
+        # English
+        "downtown", "city centre", "city center", "central business district", "CBD",
+        "financial district", "business district", "downtown core", "midtown", "uptown",
+        "neighborhood", "neighbourhood", "district", "borough", "subdistrict", "suburb",
+        "old town", "historic center", "historic centre", "city core", "inner city",
+        "central area", "town centre", "town center",
+        # Spanish/Portuguese
+        "barrio", "centro histórico", "centro", "bairro",
+        # French
+        "arrondissement", "centre-ville", "centre ville", "vieux quartier",
+        # Chinese/Japanese
+        "市中心", "中心城区", "中心商務區", "中央区", "中心商圈", "老城区", "老城",
     ]
-    session = get_http_session()
     base = f"{NOMINATIM_BASE_URL.rstrip('/')}/search"
 
     candidates: List[Tuple[float, geojson.Feature]] = []
     seen_geoms: set = set()
 
-    for syn in synonyms:
+    # 并发抓取，限制小并发，避免流量过大
+    MAX_WORKERS = 10
+
+    def _fetch_for_syn(syn: str) -> Tuple[str, List[Tuple[shapely.geometry.base.BaseGeometry, geojson.Feature]]]:
+        # 轻微抖动，降低突发流量
+        time.sleep(random.uniform(0.05, 0.2))
         q = f"{syn} {city}" if not country else f"{syn} {city}, {country}"
-        params = {"q": q, "format": "jsonv2", "polygon_geojson": 1, "addressdetails": 1, "limit": 5}
+        params = {
+            "q": q,
+            "format": "jsonv2",
+            "polygon_geojson": 1,
+            "addressdetails": 1,
+            "limit": 50,
+            "viewbox": viewbox,
+            "bounded": 1,
+        }
         try:
+            session = get_http_session()
             r = session.get(base, params=params, timeout=20)
             r.raise_for_status()
             items = r.json() or []
-        except requests.RequestException as exc:
+        except requests.RequestException:
             logger.exception("Nominatim center search failed for query='%s'", q)
-            # Continue to next synonym on transient/network error
-            continue
+            return syn, []
+        results: List[Tuple[shapely.geometry.base.BaseGeometry, geojson.Feature]] = []
         for it in items:
             gj = it.get("geojson")
             if not gj or gj.get("type") not in {"Polygon", "MultiPolygon"}:
@@ -117,18 +145,11 @@ def fetch_city_geojson(city: str, country: Optional[str] = None, focus: Optional
             except Exception:
                 continue
             # 过滤：必须完整处于城市 polygon 内部（covers 允许边界重合）
-            if not city_shape.covers(small_geom):
-                continue
-            # 去重：基于 WKB
             try:
-                geom_key = small_geom.wkb_hex
+                if not city_shape.covers(small_geom):
+                    continue
             except Exception:
-                geom_key = json.dumps(gj, sort_keys=True, ensure_ascii=False)
-            if geom_key in seen_geoms:
                 continue
-            seen_geoms.add(geom_key)
-
-            area_value = float(small_geom.area)
             feature = geojson.Feature(
                 geometry=gj,
                 properties={
@@ -140,7 +161,44 @@ def fetch_city_geojson(city: str, country: Optional[str] = None, focus: Optional
                     "keyword": syn,
                 },
             )
-            candidates.append((area_value, feature))
+            results.append((small_geom, feature))
+        return syn, results
+
+    futures = []
+    try:
+        with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
+            for syn in synonyms:
+                futures.append(executor.submit(_fetch_for_syn, syn))
+            for fut in as_completed(futures):
+                try:
+                    syn, results = fut.result()
+                except Exception:
+                    logger.exception("Unhandled exception while processing synonym task")
+                    continue
+                # [INFO] 打印该关键词返回的小多边形情况
+                print(f"[INFO] Keyword '{syn}' returned {len(results)} small polygons within '{cache_key}'.")
+                if results:
+                    sample_names = [f.properties.get("display_name") for (_, f) in results]
+                    for name in sample_names[:5]:
+                        if name:
+                            print(f"[INFO]   - {name}")
+                # 汇总并去重
+                for small_geom, feature in results:
+                    try:
+                        geom_key = small_geom.wkb_hex
+                    except Exception:
+                        try:
+                            geom_key = json.dumps(feature.geometry, sort_keys=True, ensure_ascii=False)
+                        except Exception:
+                            continue
+                    if geom_key in seen_geoms:
+                        continue
+                    seen_geoms.add(geom_key)
+                    area_value = float(small_geom.area)
+                    candidates.append((area_value, feature))
+    except Exception:
+        # 保底兜底，任何并发层面的异常都不影响主流程
+        logger.exception("Unexpected error during concurrent synonym fetching")
 
     if candidates:
         print(f"[INFO] Found {len(candidates)} candidate small polygons within '{cache_key}'.")

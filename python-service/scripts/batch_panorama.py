@@ -36,7 +36,7 @@ def main():
         img_output = os.path.join(output, f"panorama-{uid}.png")
 
         # 更换参数
-        args.zoom = 5
+        args.zoom = 3
         args.city = city
         args.output = img_output
         rst = request_pano_pipeline(args)
