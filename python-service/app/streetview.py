@@ -4,9 +4,13 @@ import math
 from typing import Any, Dict, Optional, Tuple
 
 import requests
+import logging
 
 from .config import GOOGLE_MAPS_API_KEY, get_http_session
 from .geo import random_point_in_polygon, fetch_city_geojson
+
+
+logger = logging.getLogger(__name__)
 
 
 class StreetViewError(Exception):
@@ -34,9 +38,19 @@ def street_view_metadata(lat: float, lng: float, radius: int = 50, all_panorama:
         params["source"] = source
 
     url = "https://maps.googleapis.com/maps/api/streetview/metadata"
-    response = session.get(url, params=params, timeout=60)
-    response.raise_for_status()
-    return response.json()
+    try:
+        response = session.get(url, params=params, timeout=60)
+        response.raise_for_status()
+        return response.json()
+    except requests.RequestException as exc:
+        logger.exception(
+            "Street View metadata request failed: location=%s,%s radius=%s all_panorama=%s",
+            lat,
+            lng,
+            radius,
+            all_panorama,
+        )
+        raise StreetViewError(f"Street View metadata request failed: {exc}") from exc
 
 
 def is_metadata_acceptable(metadata: Dict[str, Any], optimise: bool) -> bool:
@@ -72,7 +86,11 @@ def find_streetview_random(
     api_key: Optional[str] = None,
 ) -> Dict[str, Any]:
     if geojson_area is None and city:
-        geojson_area = fetch_city_geojson(city, country)
+        try:
+            geojson_area = fetch_city_geojson(city, country)
+        except Exception as exc:
+            logger.exception("Failed to fetch city geojson for city=%s country=%s", city, country)
+            raise StreetViewError(f"Failed to fetch city geojson: {exc}") from exc
 
     attempt = 0
     last_metadata: Optional[Dict[str, Any]] = None

@@ -23,6 +23,29 @@ if [[ -z "${GOOGLE_MAPS_API_KEY:-}" ]]; then
   exit 1
 fi
 
+
+test_google_api() {
+    echo "🔍 Testing Google API connectivity..."
+    
+    # Run curl with 3 second timeout and capture output
+    local result
+    result=$(curl -v https://www.googleapis.com 2>&1)
+    local exit_code=$?
+    
+    # Check if command completed successfully and has the expected end message
+    if [ $exit_code -eq 0 ] && echo "$result" | grep -q "Connection #0 to host.*left intact"; then
+        echo -e "\033[1;34m✅ Network Test PASSED - Google API is reachable and responding correctly\033[0m"
+        return 0
+    else
+        echo -e "\033[1;31m❌ Network Test FAILED - Unable to connect to Google API within 3 seconds\033[0m"
+        echo -e "\033[1;31m💡 Please check your proxy settings or network connection\033[0m"
+        return 1
+    fi
+}
+# Run the network test
+test_google_api
+
+
 # 在后台运行 app
 if ! lsof -i:8001 >/dev/null 2>&1; then
     python -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8001 > app/latest.log 2>&1 &

@@ -6,6 +6,7 @@ from typing import Any, Dict, List, Optional
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
+import logging
 
 from .config import GOOGLE_MAPS_API_KEY
 from .geo import random_point_in_polygon, fetch_city_geojson
@@ -13,6 +14,8 @@ from .streetview import street_view_metadata, find_streetview_random, StreetView
 
 
 app = FastAPI(title="GeoGuess Python Street View Service", version="1.0.0")
+
+logger = logging.getLogger(__name__)
 
 app.add_middleware(
     CORSMiddleware,
@@ -55,8 +58,9 @@ async def get_streetview_metadata(
 ) -> Dict[str, Any]:
     try:
         return street_view_metadata(lat, lng, radius=radius, all_panorama=all_panorama)
-    except StreetViewError as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    except Exception as e:
+        logger.exception("/streetview/metadata failed")
+        return {"error": str(e)}
 
 
 @app.post("/random-point")
@@ -81,7 +85,8 @@ async def get_city_geojson(city: str = Query(...), country: Optional[str] = Quer
         feature = fetch_city_geojson(city, country)
         return feature
     except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        logger.exception("/city-geojson failed for city=%s country=%s", city, country)
+        return {"error": str(e)}
 
 
 @app.post("/streetview/random")
@@ -97,5 +102,7 @@ async def post_streetview_random(req: StreetViewRandomRequest) -> Dict[str, Any]
             radius=req.radius,
         )
         return result
-    except StreetViewError as e:
-        raise HTTPException(status_code=404, detail=str(e)) 
+    except Exception as e:
+        logger.exception("/streetview/random failed for city=%s country=%s", req.city, req.country)
+        return {"error": str(e)} 
+        

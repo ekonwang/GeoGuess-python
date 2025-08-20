@@ -9,6 +9,7 @@ import shapely.ops
 import requests
 import math
 import json
+import logging
 
 from .config import NOMINATIM_BASE_URL, get_http_session
 
@@ -16,6 +17,9 @@ GeoJSONType = Union[Dict[str, Any], geojson.GeoJSON]
 
 # Cache: city key -> list of small polygon Features
 _CITY_SMALL_POLYGONS_CACHE: Dict[str, List[geojson.Feature]] = {}
+
+
+logger = logging.getLogger(__name__)
 
 
 def _to_shapely_geometry(obj: GeoJSONType) -> shapely.geometry.base.BaseGeometry:
@@ -96,8 +100,14 @@ def fetch_city_geojson(city: str, country: Optional[str] = None, focus: Optional
     for syn in synonyms:
         q = f"{syn} {city}" if not country else f"{syn} {city}, {country}"
         params = {"q": q, "format": "jsonv2", "polygon_geojson": 1, "addressdetails": 1, "limit": 5}
-        r = session.get(base, params=params, timeout=20); r.raise_for_status()
-        items = r.json() or []
+        try:
+            r = session.get(base, params=params, timeout=20)
+            r.raise_for_status()
+            items = r.json() or []
+        except requests.RequestException as exc:
+            logger.exception("Nominatim center search failed for query='%s'", q)
+            # Continue to next synonym on transient/network error
+            continue
         for it in items:
             gj = it.get("geojson")
             if not gj or gj.get("type") not in {"Polygon", "MultiPolygon"}:
@@ -167,9 +177,13 @@ def _fetch_city_full_geojson(city: str, country: Optional[str] = None) -> Dict[s
 
     session = get_http_session()
     url = f"{NOMINATIM_BASE_URL.rstrip('/')}/search"
-    response = session.get(url, params=params, timeout=20)
-    response.raise_for_status()
-    results = response.json()
+    try:
+        response = session.get(url, params=params, timeout=20)
+        response.raise_for_status()
+        results = response.json()
+    except requests.RequestException as exc:
+        logger.exception("Nominatim name search failed for query='%s'", query)
+        raise
 
     if not results:
         raise ValueError(f"No results for city query: {query}")
