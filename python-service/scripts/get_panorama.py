@@ -8,6 +8,7 @@ from typing import Any, Dict, Optional
 from streetview import get_panorama
 
 import requests
+from utils import print_error
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -45,6 +46,12 @@ def build_parser() -> argparse.ArgumentParser:
         type=float,
         default=0.0,
         help="Camera pitch in degrees (default: 0)",
+    )
+    parser.add_argument(
+        "--zoom",
+        type=int,
+        default=3,
+        help="Zoom level (default: 3)",
     )
     parser.add_argument(
         "--fov",
@@ -141,7 +148,7 @@ def request_pano_pipeline(args) -> int:
         print("ERROR: --google-api-key not provided and GOOGLE_MAPS_API_KEY not set", file=sys.stderr)
         return 2
 
-    print("Requesting a random Street View location from app service...")
+    print(f"Requesting a random Street View location for city [{args.city}] from app service...")
     try:
         result = request_random_panorama(
             args.app_base_url,
@@ -152,7 +159,8 @@ def request_pano_pipeline(args) -> int:
             max_attempts=int(args.max_attempts),
         )
     except Exception as e:
-        print(f"Error requesting panorama: {e}")
+        print_error(f"Error requesting loc:")
+        print(e)
         return 1, None
 
     lat = float(result["latitude"])
@@ -172,6 +180,7 @@ def request_pano_pipeline(args) -> int:
         pitch=float(args.pitch),
         fov=float(args.fov),
         output=str(args.output),
+        zoom=args.zoom,
     )
 
     if rst:

@@ -15,12 +15,13 @@ from tqdm import tqdm
 
 from gawc_city import list_gawc_city
 from get_panorama import build_parser, request_pano_pipeline
+from utils import print_hl
 
 def main():
     args = build_parser().parse_args()
 
     # 抽取 GAWC 全球排名靠前城市，保证全景图采集来自大城市 
-    cities = list_gawc_city(threshold="Beta-", strictly_higher=True)
+    cities = list_gawc_city(threshold="gamma+", strictly_higher=True)
 
     num_success = 0
     # 序列 query，避免 Google 封号
@@ -35,10 +36,12 @@ def main():
         img_output = os.path.join(output, f"panorama-{uid}.png")
 
         # 更换参数
+        args.zoom = 5
         args.city = city
         args.output = img_output
         rst = request_pano_pipeline(args)
         if rst[0] == 0:
+            print_hl(f'Panorama saved to {img_output}')
             num_success += 1
             metadata_output = os.path.join(output, f"metadata-{uid}.json")
             rst[1].update({"city": city})

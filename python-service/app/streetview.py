@@ -101,9 +101,25 @@ def find_streetview_random(
 
 
 def _estimate_radius_from_area(geojson_area: Dict[str, Any]) -> int:
-    from shapely.geometry import shape
+    from shapely.geometry import shape, GeometryCollection
+    from shapely.ops import unary_union
 
-    geom = shape(geojson_area["geometry"]) if geojson_area.get("type") == "Feature" else shape(geojson_area)
+    geom_input = geojson_area
+    geom = None
+
+    if isinstance(geom_input, dict) and geom_input.get("type") == "Feature":
+        geom = shape(geom_input["geometry"])
+    elif isinstance(geom_input, dict) and geom_input.get("type") == "FeatureCollection":
+        geoms = []
+        for f in geom_input.get("features", []):
+            try:
+                geoms.append(shape(f["geometry"]))
+            except Exception:
+                continue
+        geom = unary_union(geoms) if geoms else GeometryCollection()
+    else:
+        geom = shape(geom_input)
+
     minx, miny, maxx, maxy = geom.bounds
     # Rough heuristic similar to bbox span times factor
     dx = abs(maxx - minx)
