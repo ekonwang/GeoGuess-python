@@ -9,7 +9,7 @@ from pydantic import BaseModel, Field
 import logging
 
 from .config import GOOGLE_MAPS_API_KEY
-from .geo import random_point_in_polygon, fetch_city_geojson
+from .geo import random_point_in_polygon, fetch_city_geojson, load_all_city_caches_from_dir
 from .streetview import street_view_metadata, find_streetview_random, StreetViewError
 
 
@@ -24,6 +24,16 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Optionally pre-load city small polygon caches from a directory
+_CACHE_DIR = os.getenv("CITY_SMALL_CACHE_DIR")
+if _CACHE_DIR:
+    try:
+        loaded = load_all_city_caches_from_dir(_CACHE_DIR)
+        if loaded:
+            print(f"[INFO] Preloaded {loaded} city caches from '{_CACHE_DIR}'.")
+    except Exception:
+        logger.exception("Failed preloading caches from CITY_SMALL_CACHE_DIR")
 
 
 class RandomPointRequest(BaseModel):
@@ -50,7 +60,7 @@ async def health() -> Dict[str, Any]:
 
 
 @app.get("/streetview/metadata")
-async def get_streetview_metadata(
+def get_streetview_metadata(
     lat: float = Query(..., ge=-90.0, le=90.0),
     lng: float = Query(..., ge=-180.0, le=180.0),
     radius: int = Query(50, ge=1, le=500000),
@@ -64,7 +74,7 @@ async def get_streetview_metadata(
 
 
 @app.post("/random-point")
-async def post_random_point(req: RandomPointRequest) -> Dict[str, Any]:
+def post_random_point(req: RandomPointRequest) -> Dict[str, Any]:
     if req.geojson is None:
         # Global random sampling not provided; pick using city or explicit area only in this endpoint
         from random import random
@@ -80,7 +90,7 @@ async def post_random_point(req: RandomPointRequest) -> Dict[str, Any]:
 
 
 @app.get("/city-geojson")
-async def get_city_geojson(city: str = Query(...), country: Optional[str] = Query(None)) -> Dict[str, Any]:
+def get_city_geojson(city: str = Query(...), country: Optional[str] = Query(None)) -> Dict[str, Any]:
     try:
         feature = fetch_city_geojson(city, country)
         return feature
@@ -90,7 +100,7 @@ async def get_city_geojson(city: str = Query(...), country: Optional[str] = Quer
 
 
 @app.post("/streetview/random")
-async def post_streetview_random(req: StreetViewRandomRequest) -> Dict[str, Any]:
+def post_streetview_random(req: StreetViewRandomRequest) -> Dict[str, Any]:
     try:
         result = find_streetview_random(
             geojson_area=req.geojson,

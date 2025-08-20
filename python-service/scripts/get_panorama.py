@@ -114,7 +114,7 @@ def request_random_panorama(
         "optimise": optimise,
         "max_attempts": max_attempts,
     }
-    resp = requests.post(url, json=payload, timeout=60)
+    resp = requests.post(url, json=payload, timeout=120)
     if 'error' in resp.json():
         raise RuntimeError(f"App service error: {resp.json()['error']}")
     if resp.status_code != 200:

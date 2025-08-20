@@ -24,6 +24,14 @@ _CITY_SMALL_POLYGONS_CACHE: Dict[str, List[geojson.Feature]] = {}
 logger = logging.getLogger(__name__)
 
 
+def _safe_mkdirs(path: str) -> None:
+    try:
+        import os
+        os.makedirs(path, exist_ok=True)
+    except Exception:
+        pass
+
+
 def _to_shapely_geometry(obj: GeoJSONType) -> shapely.geometry.base.BaseGeometry:
     if isinstance(obj, dict):
         gobj = geojson.loads(geojson.dumps(obj))
@@ -177,11 +185,11 @@ def fetch_city_geojson(city: str, country: Optional[str] = None, focus: Optional
                     continue
                 # [INFO] 打印该关键词返回的小多边形情况
                 print(f"[INFO] Keyword '{syn}' returned {len(results)} small polygons within '{cache_key}'.")
-                if results:
-                    sample_names = [f.properties.get("display_name") for (_, f) in results]
-                    for name in sample_names[:5]:
-                        if name:
-                            print(f"[INFO]   - {name}")
+                # if results:
+                    # sample_names = [f.properties.get("display_name") for (_, f) in results]
+                    # for name in sample_names[:5]:
+                    #     if name:
+                    #         print(f"[INFO]   - {name}")
                 # 汇总并去重
                 for small_geom, feature in results:
                     try:
@@ -217,6 +225,91 @@ def fetch_city_geojson(city: str, country: Optional[str] = None, focus: Optional
     # 写入缓存并返回
     _CITY_SMALL_POLYGONS_CACHE[cache_key] = top
     return geojson.FeatureCollection(features=top)
+
+
+def save_city_small_polygons_cache(cache_dir: str, city: str, country: Optional[str], features: List[geojson.Feature]) -> str:
+    """Save small polygons to a cache file for given city.
+
+    File path: {cache_dir}/{cache_key}.geojson where cache_key is from _city_cache_key.
+    Returns the file path.
+    """
+    import os
+    _safe_mkdirs(cache_dir)
+    cache_key = _city_cache_key(city, country)
+    filepath = os.path.join(cache_dir, f"{cache_key}.geojson")
+    try:
+        fc = geojson.FeatureCollection(features=features)
+        with open(filepath, "w", encoding="utf-8") as f:
+            json.dump(fc, f, ensure_ascii=False)
+        print(f"[INFO] Saved cache for '{cache_key}' -> {filepath} ({len(features)} features)")
+    except Exception:
+        logger.exception("Failed to save city cache: %s", cache_key)
+    return filepath
+
+
+def load_city_small_polygons_cache(cache_dir: str, city: str, country: Optional[str]) -> bool:
+    """Load small polygons from cache file into memory cache. Returns True if loaded."""
+    import os
+    cache_key = _city_cache_key(city, country)
+    filepath = os.path.join(cache_dir, f"{cache_key}.geojson")
+    try:
+        if not os.path.isfile(filepath):
+            return False
+        with open(filepath, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        if isinstance(data, dict) and data.get("type") == "FeatureCollection":
+            features = []
+            for feat in data.get("features", []):
+                try:
+                    # normalise to geojson.Feature
+                    features.append(geojson.Feature(geometry=feat.get("geometry"), properties=feat.get("properties", {})))
+                except Exception:
+                    continue
+            if features:
+                _CITY_SMALL_POLYGONS_CACHE[cache_key] = features
+                print(f"[INFO] Loaded cache for '{cache_key}' from file with {len(features)} features")
+                return True
+    except Exception:
+        logger.exception("Failed to load city cache: %s", cache_key)
+    return False
+
+
+def load_all_city_caches_from_dir(cache_dir: str) -> int:
+    """Bulk load all *.geojson cache files from directory into memory cache. Returns count loaded."""
+    import os
+    count = 0
+    try:
+        if not os.path.isdir(cache_dir):
+            return 0
+        for name in os.listdir(cache_dir):
+            if not name.endswith(".geojson"):
+                continue
+            filepath = os.path.join(cache_dir, name)
+            try:
+                with open(filepath, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                if not (isinstance(data, dict) and data.get("type") == "FeatureCollection"):
+                    continue
+                features = []
+                for feat in data.get("features", []):
+                    try:
+                        features.append(geojson.Feature(geometry=feat.get("geometry"), properties=feat.get("properties", {})))
+                    except Exception:
+                        continue
+                if not features:
+                    continue
+                # derive cache_key from filename (strip .geojson)
+                cache_key = name[:-8]
+                _CITY_SMALL_POLYGONS_CACHE[cache_key] = features
+                count += 1
+            except Exception:
+                logger.exception("Failed to load cache file: %s", filepath)
+                continue
+        if count:
+            print(f"[INFO] Loaded {count} city caches from '{cache_dir}'.")
+    except Exception:
+        logger.exception("Failed to scan cache directory: %s", cache_dir)
+    return count
 
 
 def _fetch_city_full_geojson(city: str, country: Optional[str] = None) -> Dict[str, Any]:
