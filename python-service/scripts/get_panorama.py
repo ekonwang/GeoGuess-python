@@ -161,7 +161,7 @@ def request_pano_pipeline(args) -> int:
             max_attempts=int(args.max_attempts),
         )
     except Exception as e:
-        print_error(f"Error requesting loc:")
+        print_error(f"Error requesting loc for {args.city}")
         print(e)
         return 1, None
 

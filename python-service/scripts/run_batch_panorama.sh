@@ -66,6 +66,6 @@ python "$SCRIPT_DIR/batch_panorama.py" \
   --app-base-url "$APP_BASE_URL" \
   --google-api-key "$GOOGLE_MAPS_API_KEY" \
   --max-attempts 10 \
-  --num_query 500 \
-  --batch_out_dir ${MAIN_PROJECT_TEMP}/datasets/google_javascript_maps --concurrency 1
+  --num_query 5000 \
+  --batch_out_dir ${MAIN_PROJECT_TEMP}/datasets/google_javascript_maps --concurrency 3
   "$@" 

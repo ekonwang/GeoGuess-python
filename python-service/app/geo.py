@@ -98,6 +98,8 @@ def fetch_city_geojson(city: str, country: Optional[str] = None, focus: Optional
         features_cached = _CITY_SMALL_POLYGONS_CACHE[cache_key]
         print(f"[INFO] Cache hit for city '{cache_key}', polygons: {len(features_cached)}")
         return geojson.FeatureCollection(features=features_cached)
+    elif len(_CITY_SMALL_POLYGONS_CACHE) >= 90:
+        raise ValueError(f"Cache Miss for {cache_key}")
 
     # 步骤 2：使用关键词查找城市中心（小 polygon/multipolygon）
     synonyms = [
