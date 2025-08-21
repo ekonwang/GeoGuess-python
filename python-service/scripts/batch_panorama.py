@@ -42,7 +42,7 @@ def main():
     args = parser.parse_args()
 
     # 抽取 GAWC 全球排名靠前城市，保证全景图采集来自大城市 
-    cities = list_gawc_city(threshold="gamma+", strictly_higher=True)
+    cities = ['Beijing', 'Dubai', 'Hong Kong', 'Paris', 'Shanghai', 'Singapore', 'Sydney', 'Tokyo', 'Amsterdam', 'Bangkok', 'Chicago', 'Frankfurt', 'Guangzhou', 'Istanbul', 'Jakarta', 'Kuala Lumpur', 'Los Angeles', 'Madrid', 'Mexico City', 'Milan', 'Mumbai', 'São Paulo', 'Seoul', 'Toronto', 'Warsaw', 'Berlin', 'Boston', 'Brussels', 'Buenos Aires', 'Dublin', 'Düsseldorf', 'Houston', 'Johannesburg', 'Lisbon', 'Luxembourg City', 'Melbourne', 'Munich', 'New Delhi', 'Riyadh', 'San Francisco', 'Santiago', 'Shenzhen', 'Stockholm', 'Taipei', 'Vienna', 'Washington, D.C.', 'Zurich', 'Athens', 'Atlanta', 'Auckland', 'Barcelona', 'Bengaluru', 'Bogotá', 'Bucharest', 'Budapest', 'Chengdu', 'Dallas', 'Doha', 'Hamburg', 'Hangzhou', 'Ho Chi Minh City', 'Lima', 'Miami', 'Montreal', 'Prague', 'Rome', 'Tianjin', 'Abu Dhabi', 'Brisbane', 'Cairo', 'Calgary', 'Chongqing', 'Copenhagen', 'Dalian', 'Geneva', 'Hanoi', 'Jinan', 'Kyiv', 'Manama', 'Manila', 'Nairobi', 'Nanjing', 'Oslo', 'Perth', 'Shenyang', 'Suzhou', 'Tel Aviv', 'Wuhan', 'Xiamen', 'Zhengzhou', 'Beirut', 'Belgrade', 'Bratislava', 'Caracas', 'Casablanca', 'Changsha', 'Chennai', 'Denver', 'Hefei', 'Helsinki', 'Karachi', 'Kunming', 'Lagos', 'Lyon', 'Manchester', 'Montevideo', 'Nicosia', 'Panama City', 'Philadelphia', 'Port Louis', 'Qingdao', 'Rio de Janeiro', 'Seattle', 'Sofia', 'Stuttgart', 'Vancouver', "Xi'an", 'Zagreb']
 
     num_success = 0
 

@@ -85,12 +85,6 @@ def _city_cache_key(city: str, country: Optional[str]) -> str:
 
 
 def fetch_city_geojson(city: str, country: Optional[str] = None, focus: Optional[str] = None, method: str = "nominatim_name") -> Dict[str, Any]:
-    # 步骤 1：获取全市范围 polygon
-    full_feature = _fetch_city_full_geojson(city, country)
-    city_shape = _to_shapely_geometry(full_feature)
-    minx, miny, maxx, maxy = city_shape.bounds
-    # Nominatim: viewbox = left,top,right,bottom
-    viewbox = f"{minx},{maxy},{maxx},{miny}"
 
     # 先查缓存
     cache_key = _city_cache_key(city, country)
@@ -100,6 +94,13 @@ def fetch_city_geojson(city: str, country: Optional[str] = None, focus: Optional
         return geojson.FeatureCollection(features=features_cached)
     elif len(_CITY_SMALL_POLYGONS_CACHE) >= 90:
         raise ValueError(f"Cache Miss for {cache_key}")
+    
+    # 步骤 1：获取全市范围 polygon
+    full_feature = _fetch_city_full_geojson(city, country)
+    city_shape = _to_shapely_geometry(full_feature)
+    minx, miny, maxx, maxy = city_shape.bounds
+    # Nominatim: viewbox = left,top,right,bottom
+    viewbox = f"{minx},{maxy},{maxx},{miny}"
 
     # 步骤 2：使用关键词查找城市中心（小 polygon/multipolygon）
     synonyms = [
