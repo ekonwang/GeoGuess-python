@@ -14,7 +14,14 @@ cd ${PROJECT_DIR}
 # 设置 SSL 以及代理
 export SSL_CERT_FILE="$(python -c 'import certifi; print(certifi.where())')"
 export REQUESTS_CA_BUNDLE="$SSL_CERT_FILE"
-export ALL_PROXY=http://127.0.0.1:7890
+if [[ -n "${https_proxy:-}" || -n "${http_proxy:-}" ]]; then
+    echo "Using existing proxy settings:"
+    echo "http_proxy=${http_proxy:-<not set>}"
+    echo "https_proxy=${https_proxy:-<not set>}"
+else
+    export ALL_PROXY=http://127.0.0.1:7890
+    echo "Using proxy: http://127.0.0.1:7890"
+fi
 
 # 检查 Google Maps API Key 是否设置
 if [[ -z "${GOOGLE_MAPS_API_KEY:-}" ]]; then
