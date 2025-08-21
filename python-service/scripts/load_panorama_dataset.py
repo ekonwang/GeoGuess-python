@@ -6,7 +6,7 @@ import json
 from typing import Any, Dict, List, Optional
 
 
-def load(dataset_dir: str) -> List[Dict[str, Any]]:
+def load(dataset_dir: str, debug: bool = False, progress_every: int = 200) -> List[Dict[str, Any]]:
     """
     加载由 `batch_panorama.py` 生成的数据集。
 
@@ -18,6 +18,8 @@ def load(dataset_dir: str) -> List[Dict[str, Any]]:
 
     参数:
         dataset_dir: 数据集根目录路径（即 --batch_out_dir）
+        debug: 是否输出调试信息（进度、跳过原因、错误等）。默认 False。
+        progress_every: debug 模式下每处理多少个条目输出一次进度。默认 200。
 
     返回:
         一个字典列表，每个字典包含：
@@ -32,7 +34,21 @@ def load(dataset_dir: str) -> List[Dict[str, Any]]:
 
     records: List[Dict[str, Any]] = []
 
-    for entry_name in os.listdir(dataset_dir):
+    if debug:
+        print(f"[load] Scanning dataset_dir: {dataset_dir}", flush=True)
+
+    try:
+        entries = os.listdir(dataset_dir)
+    except Exception as e:
+        if debug:
+            print(f"[load] os.listdir failed: {e}", flush=True)
+        raise
+
+    total_entries = len(entries)
+    if debug:
+        print(f"[load] Found {total_entries} entries (directories expected)", flush=True)
+
+    for idx, entry_name in enumerate(entries):
         entry_path = os.path.join(dataset_dir, entry_name)
         if not os.path.isdir(entry_path):
             continue
@@ -46,13 +62,20 @@ def load(dataset_dir: str) -> List[Dict[str, Any]]:
 
         if not os.path.isfile(image_path) or not os.path.isfile(metadata_path):
             # 跳过不完整样本
+            if debug and (idx % progress_every == 0):
+                print(f"[load] Incomplete sample skipped at idx={idx}, uid={uid}", flush=True)
             continue
+
+        if debug and (idx % progress_every == 0):
+            print(f"[load] Progress {idx}/{total_entries} | reading metadata for uid={uid} | collected={len(records)}", flush=True)
 
         try:
             with open(metadata_path, "r", encoding="utf-8") as f:
                 metadata: Dict[str, Any] = json.load(f)
-        except Exception:
+        except Exception as e:
             # 元数据损坏，跳过该样本
+            if debug:
+                print(f"[load] Failed to read metadata for uid={uid}: {e}", flush=True)
             continue
 
         record: Dict[str, Any] = {
@@ -65,7 +88,10 @@ def load(dataset_dir: str) -> List[Dict[str, Any]]:
         records.append(record)
 
     # 为了可重复性，按 uid 排序
-    records.sort(key=lambda r: r["uid"]) 
+    records.sort(key=lambda r: r["uid"])
+
+    if debug:
+        print(f"[load] Completed. Returned records={len(records)} (unique uids) out of {total_entries} entries", flush=True)
 
     return records
 
@@ -76,9 +102,11 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description="Load panorama dataset and print stats")
     parser.add_argument("--dataset_dir", type=str, help="Path to dataset root directory")
+    parser.add_argument("--debug", action="store_true", help="Enable debug output")
+    parser.add_argument("--progress_every", type=int, default=200, help="Progress print frequency when debug is on")
     args = parser.parse_args()
 
-    items = load(args.dataset_dir)
+    items = load(args.dataset_dir, debug=args.debug, progress_every=args.progress_every)
     print(f"Loaded records: {len(items)}")
     if items:
         example = items[0]
