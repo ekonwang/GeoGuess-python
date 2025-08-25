@@ -7,7 +7,7 @@ from typing import Any, Dict, List, Optional
 from concurrent.futures import ThreadPoolExecutor
 
 
-def load(dataset_dir: str, debug: bool = False, progress_every: int = 200, jsonl_filter: Optional[str] = None, max_workers: Optional[int] = None) -> List[Dict[str, Any]]:
+def load(dataset_dir: str, debug: bool = False, progress_every: int = 200, jsonl_filter: Optional[str] = None, max_workers: Optional[int] = None, load_multi_level: bool = False) -> List[Dict[str, Any]]:
     """
     加载由 `batch_panorama.py` 生成的数据集。
 
@@ -16,6 +16,7 @@ def load(dataset_dir: str, debug: bool = False, progress_every: int = 200, jsonl
             <uid>/
                 panorama-<uid>.png
                 metadata-<uid>.json   # 包含抓取到的元信息以及 city 字段
+                multi_level_loc_dict_<uid>.json  # 可选，由下游标注脚本生成
 
     参数:
         dataset_dir: 数据集根目录路径（即 --batch_out_dir）
@@ -23,6 +24,7 @@ def load(dataset_dir: str, debug: bool = False, progress_every: int = 200, jsonl
         progress_every: debug 模式下每处理多少个条目输出一次进度。默认 200。
         jsonl_filter: 若提供，读取其中 decision==True 的 uid，仅加载这些样本。
         max_workers: 并行读取元数据文件的线程数（None 表示自动选择）。
+        load_multi_level: 若为 True，则仅加载存在 multi_level_loc_dict_<uid>.json 的样本；默认 False（行为不变）。
 
     返回:
         一个字典列表，每个字典包含：
@@ -107,6 +109,15 @@ def load(dataset_dir: str, debug: bool = False, progress_every: int = 200, jsonl
                 print(f"[load] Incomplete sample skipped at idx={idx}, uid={uid}", flush=True)
             continue
 
+        if load_multi_level:
+            # 仅当 multi_level_loc_dict 存在时才纳入
+            ml_filename = f"multi_level_loc_dict_{uid}.json"
+            ml_path = os.path.join(dir_entry.path, ml_filename)
+            if not os.path.isfile(ml_path):
+                if debug and (idx % progress_every == 0):
+                    print(f"[load] Skipping uid={uid} due to missing {ml_filename}", flush=True)
+                continue
+
         candidates.append((uid, image_path, metadata_path))
 
     if debug:
@@ -164,9 +175,10 @@ if __name__ == "__main__":
     parser.add_argument("--progress_every", type=int, default=200, help="Progress print frequency when debug is on")
     parser.add_argument("--jsonl_filter", type=str, default=None, help="Path to results JSONL; keep only UIDs with decision==True")
     parser.add_argument("--max_workers", type=int, default=None, help="Thread pool size for metadata reads (default auto)")
+    parser.add_argument("--load_multi_level", action="store_true", help="Only include samples that have multi_level_loc_dict_<uid>.json")
     args = parser.parse_args()
 
-    items = load(args.dataset_dir, debug=args.debug, progress_every=args.progress_every, jsonl_filter=args.jsonl_filter, max_workers=args.max_workers)
+    items = load(args.dataset_dir, debug=args.debug, progress_every=args.progress_every, jsonl_filter=args.jsonl_filter, max_workers=args.max_workers, load_multi_level=args.load_multi_level)
     print(f"Loaded records: {len(items)}")
     if items:
         example = items[0]
