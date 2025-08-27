@@ -134,6 +134,21 @@ def load(dataset_dir: str, debug: bool = False, progress_every: int = 200, jsonl
                 print(f"[load] Failed to read metadata for uid={uid}: {e}", flush=True)
             return None
 
+        # 若需要加载 multi-level 位置信息，则读入并写入 metadata['location']['multi_level_loc_dict']
+        if load_multi_level:
+            ml_path = os.path.join(os.path.dirname(metadata_path), f"multi_level_loc_dict_{uid}.json")
+            try:
+                with open(ml_path, "r", encoding="utf-8") as f:
+                    ml_dict: Dict[str, Any] = json.load(f)
+            except Exception as e:
+                if debug:
+                    print(f"[load] Failed to read multi_level_loc_dict for uid={uid}: {e}", flush=True)
+                return None
+            # 确保 metadata['location'] 存在且为字典
+            if not isinstance(metadata.get("location"), dict):
+                metadata["location"] = {}
+            metadata["location"]["multi_level_loc_dict"] = ml_dict
+
         return {
             "uid": uid,
             "image_path": image_path,
