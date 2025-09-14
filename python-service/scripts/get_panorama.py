@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import os
 import sys
+import random
 from typing import Any, Dict, Optional
 from streetview import get_panorama
 
@@ -56,8 +57,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--fov",
         type=float,
-        default=360.0,
-        help="Field of view in degrees (default: 90)",
+        default=120,
+        help="Field of view in degrees (default: 90) for image mode",
     )
     parser.add_argument(
         "--all-panorama",
@@ -94,6 +95,18 @@ def build_parser() -> argparse.ArgumentParser:
         required=True,
         help="Output directory (default: panorama_batch)",
     )
+    parser.add_argument(
+        "--image_mode",
+        choices=["panorama", "image"],
+        default="panorama",
+        help='Output mode: "panorama" keeps original behavior; "image" uses Street View Static API',
+    )
+    parser.add_argument(
+        "--scale",
+        type=int,
+        default=2,
+        help="Scale for Street View Static API (image mode). 2 yields effective 1280x1280 (default: 2)",
+    )
     return parser
 
 
@@ -124,7 +137,8 @@ def request_random_panorama(
 
 def download_streetview_png(
     *,
-    api_key: str,
+    image_mode: str,
+    api_key: Optional[str],
     lat: float,
     lng: float,
     pano_id: Optional[str],
@@ -133,22 +147,64 @@ def download_streetview_png(
     fov: float,
     output: str,
     zoom: int = 3,
+    scale: int = 2,
 ):
-    try:
-        panorama = get_panorama(pano_id, multi_threaded=False, zoom=zoom)
-    except Exception as e:
-        print(f"Error downloading panorama: {e}")
-        return False
+    if image_mode == "panorama":
+        try:
+            panorama = get_panorama(pano_id, multi_threaded=False, zoom=zoom)
+        except Exception as e:
+            print(f"Error downloading panorama: {e}")
+            return False
+        os.makedirs(os.path.dirname(output), exist_ok=True)
+        panorama.save(output, format="PNG")
+        return True
 
-    os.makedirs(os.path.dirname(output), exist_ok=True)
-    panorama.save(output, format="PNG")
-    return True
+    elif image_mode == "image":
+        # image_mode == "image": use Google Street View Static API
+        env_key = os.getenv("GOOGLE_MAPS_API_KEY")
+        if not env_key:
+            raise RuntimeError("GOOGLE_MAPS_API_KEY is not set in environment for image mode")
+
+        base_url = "https://maps.googleapis.com/maps/api/streetview"
+        params: Dict[str, Any] = {
+            "size": "1280x1280",
+            "scale": int(scale),
+            "location": f"{lat},{lng}",
+            "fov": float(fov),
+            "pitch": float(pitch),
+            "key": env_key,
+        }
+        if heading is not None:
+            params["heading"] = float(heading)
+        else:
+            # random heading
+            params["heading"] = random.uniform(0, 360)
+
+        try:
+            resp = requests.get(base_url, params=params, timeout=120)
+        except Exception as e:
+            print(f"Error requesting Street View Static API: {e}")
+            return False
+
+        if resp.status_code != 200:
+            print(f"Street View Static API error {resp.status_code}: {resp.text}")
+            return False
+
+        content_type = resp.headers.get("Content-Type", "")
+        if "image" not in content_type:
+            print(f"Unexpected response (Content-Type={content_type}): {resp.text[:200]}")
+            return False
+
+        os.makedirs(os.path.dirname(output), exist_ok=True)
+        with open(output, "wb") as f:
+            f.write(resp.content)
+        return True
 
 
 def request_pano_pipeline(args) -> int:
-    if not args.google_api_key:
-        print("ERROR: --google-api-key not provided and GOOGLE_MAPS_API_KEY not set", file=sys.stderr)
-        return 2
+    # In image mode, require env var and raise if missing (terminate)
+    if not os.getenv("GOOGLE_MAPS_API_KEY"):
+        raise RuntimeError("GOOGLE_MAPS_API_KEY must be set in environment for image mode")
 
     print(f"Requesting a random Street View location for city [{args.city}] from app service...")
     try:
@@ -174,6 +230,7 @@ def request_pano_pipeline(args) -> int:
 
     print(f"Downloading PNG to {args.output}...")
     rst = download_streetview_png(
+        image_mode=str(args.image_mode),
         api_key=args.google_api_key,
         lat=lat,
         lng=lng,
@@ -183,6 +240,7 @@ def request_pano_pipeline(args) -> int:
         fov=float(args.fov),
         output=str(args.output),
         zoom=args.zoom,
+        scale=int(args.scale),
     )
 
     if rst:
