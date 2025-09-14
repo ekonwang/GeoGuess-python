@@ -6,9 +6,12 @@ PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 MAIN_PROJECT_TEMP=$(cd $PROJECT_DIR/../../../.temp && pwd)
 echo ${MAIN_PROJECT_TEMP}
 
+# 设置环境变量
+set -a; source ${MAIN_PROJECT_TEMP}/../.env; set +a;
+
 # activate the gpt-researcher conda environment
-# eval "$(conda shell.bash hook)"
-# conda activate gpt-researcher
+eval "$(conda shell.bash hook)" || true
+conda activate gpt-researcher || true
 cd ${PROJECT_DIR}
 
 # 设置 SSL 以及代理
