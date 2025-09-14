@@ -46,7 +46,7 @@ test_google_api() {
 test_google_api
 
 
-cd $(dirname $0)/..
+# cd $(dirname $0)/..
 
 # Use -m to run within package context so relative imports work
 python -m app.make_geojson_cache --cache-dir app/geojson_cache --concurrency 1

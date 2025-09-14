@@ -38,6 +38,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--concurrency", type=int, default=2, help="Max parallel fetches (default: 2)")
     parser.add_argument("--limit", type=int, default=None, help="Limit the number of cities to process (debug)")
     parser.add_argument("--force_overwrite", action="store_true", help="Overwrite existing cache files if present")
+    parser.add_argument("--all_cn_cities", action="store_true", help="Use all Chinese cities.")
     return parser
 
 
@@ -79,7 +80,10 @@ def main() -> int:
     os.makedirs(args.cache_dir, exist_ok=True)
 
     print(f"[INFO] Building GeoJSON caches to '{args.cache_dir}'...")
-    cities = list_gawc_city(threshold=args.threshold, strictly_higher=bool(args.strictly_higher), debug=True)
+    if not args.all_cn_cities:  
+        cities = list_gawc_city(threshold=args.threshold, strictly_higher=bool(args.strictly_higher), debug=True)
+    else:
+        cities = ['Shanghai', 'Beijing', 'Shenzhen', 'Guangzhou', 'Chengdu', 'Tianjin', 'Wuhan', 'Dongguan', 'Chongqing', "Xi'an", 'Hangzhou', 'Foshan', 'Nanjing', 'Shenyang', 'Zhengzhou', 'Qingdao', 'Suzhou', 'Jinan', 'Changsha', 'Kunming', 'Harbin', 'Shijiazhuang', 'Hefei', 'Dalian', 'Xiamen', 'Nanning', 'Changchun', 'Taiyuan', 'Guiyang', 'Wuxi', 'Ürümqi', 'Zhongshan', 'Shantou', 'Ningbo', 'Fuzhou', 'Nanchang', 'Changzhou', 'Lanzhou', 'Nantong', 'Huizhou', 'Xuzhou', 'Zibo', 'Linyi', 'Wenzhou', 'Tangshan', 'Hohhot', 'Haikou', 'Shaoxing', 'Yantai', 'Luoyang', 'Zhuhai', 'Liuzhou', 'Baotou', 'Handan', 'Yangzhou', 'Weifang', 'Baoding', 'Datong', "Huai'an", 'Jiangmen', 'Ganzhou', 'Jining', 'Xiangyang', 'Xining', 'Zunyi', 'Yinchuan', 'Kunshan', 'Daqing', 'Wuhu', 'Mianyang', 'Putian', 'Qinhuangdao', 'Zhuzhou', 'Jilin', 'Taizhou', 'Yiwu', 'Xingtai', 'Anshan', 'Quanzhou', 'Cixi', "Tai'an", 'Jinjiang', 'Nanyang', 'Zhanjiang', 'Guilin', 'Yancheng', 'Zaozhuang', 'Shangrao', 'Weihai', 'Zhangjiakou', 'Jiangyin', 'Maoming', 'Heze', 'Yichang', 'Xinxiang', 'Huainan', 'Nanchong', 'Chaozhou', 'Jieyang', 'Changshu']
     if args.limit:
         cities = cities[: int(args.limit)]
 
