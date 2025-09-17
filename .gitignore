@@ -32,4 +32,9 @@ yarn-error.log*
 stryker-tmp
 
 *.png
+*.jpg
+*.jpeg
+
+*output*
+
 *.log

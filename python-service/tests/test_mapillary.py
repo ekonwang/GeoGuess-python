@@ -54,5 +54,5 @@ def fetch_mapillary_image(lat, lon, max_radius_m=20, max_distance_m=10, min_size
 
 # 使用示例
 lat, lon = 40.4246, -74.0022  # 换成你的经纬度
-meta, err = fetch_mapillary_image(lat, lon, max_radius_m=25, max_distance_m=10, min_size="thumb_1024_url")
+meta, err = fetch_mapillary_image(lat, lon, max_radius_m=250000, max_distance_m=100000, min_size="thumb_1024_url")
 print(err or meta)
