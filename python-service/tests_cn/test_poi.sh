@@ -8,4 +8,4 @@ python test_poi.py \
   --radius 10000 \
   --limit 100 \
   --maxwidth 8000 \
-  --outdir "./sh_photos"
+  --outdir "./sh_photos" --debug

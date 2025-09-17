@@ -129,6 +129,8 @@ class GooglePlacesClient:
 
         total_bytes = 0
         with self.session.get(GOOGLE_PLACES_PHOTO_URL, params=params, stream=True, timeout=30) as r:
+            # print(r.url)
+            # import pdb; pdb.set_trace()
             if self.debug:
                 dbg_url = r.url.replace(self.api_key, '***') if self.api_key else r.url
                 print(f"[DBG] Photo redirect final URL: {dbg_url} status={r.status_code}")
@@ -209,6 +211,10 @@ def collect_places_with_photos(
                     print(f"[DBG] No next_page_token for type={t}")
                 break
             time.sleep(page_sleep)
+        # TODO: 生产代码，需要注释掉这行
+        if debug:
+            if len(seen_place_ids) > 0:
+                break
 
         time.sleep(0.4)
 
