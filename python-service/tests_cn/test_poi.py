@@ -153,6 +153,7 @@ def collect_places_with_photos(
     per_type_pages: int = 3,
     page_sleep: float = 2.1,
     debug: bool = False,
+    show_progress: bool = False,
 ) -> List[Dict]:
     """
     Iterate multiple place types and collect places that have photos[].
@@ -160,6 +161,15 @@ def collect_places_with_photos(
     """
     results: List[Dict] = []
     seen_place_ids: Set[str] = set()
+
+    total_steps = len(types) * per_type_pages
+    pbar = None
+    if show_progress and total_steps > 0:
+        try:
+            from tqdm.auto import tqdm
+            pbar = tqdm(total=total_steps, desc="Collecting places", disable=False)
+        except Exception:
+            pbar = None
 
     for t in types:
         if debug:
@@ -173,6 +183,8 @@ def collect_places_with_photos(
             status = data.get("status", "")
             if status not in ("OK", "ZERO_RESULTS"):
                 print(f"[WARN] Nearby status={status} for type={t} token={pagetoken}")
+                if pbar:
+                    pbar.update(1)
                 break
 
             added_this_page = 0
@@ -184,6 +196,12 @@ def collect_places_with_photos(
             if debug:
                 print(f"[DBG] Added {added_this_page} unique places (cum={len(results)}) for type={t}")
             pages_fetched += 1
+            if pbar:
+                try:
+                    pbar.update(1)
+                    pbar.set_postfix(type=t, page=pages_fetched, cum=len(results))
+                except Exception:
+                    pass
 
             pagetoken = data.get("next_page_token")
             if not pagetoken:
@@ -193,6 +211,12 @@ def collect_places_with_photos(
             time.sleep(page_sleep)
 
         time.sleep(0.4)
+
+    if pbar:
+        try:
+            pbar.close()
+        except Exception:
+            pass
 
     return results
 

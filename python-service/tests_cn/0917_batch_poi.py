@@ -91,6 +91,7 @@ def run_for_center(
     maxwidth: Optional[int] = 8000,
     maxheight: Optional[int] = None,
     debug: bool = False,
+    show_progress: bool = False,
 ) -> List[Dict]:
     """
     Core function: given center (lat,lng string) and radius, download photos.
@@ -106,6 +107,7 @@ def run_for_center(
         types=types,
         per_type_pages=per_type_pages,
         debug=debug,
+        show_progress=show_progress,
     )
 
     # Build candidates with min_width filter
@@ -184,12 +186,20 @@ def process_city(
         maxwidth=maxwidth,
         maxheight=maxheight,
         debug=debug,
+        show_progress=True,
     )
 
     # Reuse client for photo downloads
     client = GooglePlacesClient(api_key=api_key, debug=debug)
 
     ok = 0
+    # Progress bar for downloading photos of this city
+    try:
+        from tqdm.auto import tqdm
+        pbar = tqdm(total=len(items), desc=f"{city} photos", disable=False)
+    except Exception:
+        pbar = None
+
     for it in items:
         uid = uuid.uuid4().hex
         subdir = city_outdir / uid
@@ -208,6 +218,11 @@ def process_city(
             )
         except Exception as e:
             print(f"[ERR] City={city} place_id={it.get('place_id')} download failed: {e}")
+            if pbar:
+                try:
+                    pbar.update(1)
+                except Exception:
+                    pass
             continue
 
         metadata = {
@@ -221,7 +236,6 @@ def process_city(
                 json.dump(metadata, f, ensure_ascii=False, indent=2)
         except Exception as e:
             print(f"[ERR] City={city} place_id={it.get('place_id')} write metadata failed: {e}")
-            # Best-effort cleanup of image if metadata fails
             try:
                 if png_path.exists():
                     png_path.unlink()
@@ -229,10 +243,26 @@ def process_city(
                     subdir.rmdir()
             except Exception:
                 pass
+            if pbar:
+                try:
+                    pbar.update(1)
+                except Exception:
+                    pass
             continue
 
         ok += 1
+        if pbar:
+            try:
+                pbar.update(1)
+            except Exception:
+                pass
         time.sleep(0.05)
+
+    if pbar:
+        try:
+            pbar.close()
+        except Exception:
+            pass
 
     return ok
 
@@ -296,7 +326,7 @@ def process_cities(
 def main():
     parser = argparse.ArgumentParser(description="Batch download city photos using Google Places Photos API")
     parser.add_argument("--radius", type=int, default=3000, help="Search radius in meters")
-    parser.add_argument("--outdir", type=str, default="./city_photos", help="Output base directory")
+    parser.add_argument("--outdir", type=str, default="./output_city_photos", help="Output base directory")
     parser.add_argument("--limit", type=int, default=120, help="Max photos per city")
     parser.add_argument("--per-type-pages", type=int, default=3, help="Pages per type")
     parser.add_argument("--min_width", type=int, default=2000, help="Min photo width to keep")
