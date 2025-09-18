@@ -38,3 +38,5 @@ stryker-tmp
 *output*
 
 *.log
+
+*google_poi_cn/
