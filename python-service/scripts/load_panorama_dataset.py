@@ -23,7 +23,7 @@ def load(dataset_dir: str, debug: bool = False, progress_every: int = 200, jsonl
         debug: 是否输出调试信息（进度、跳过原因、错误等）。默认 False。
         progress_every: debug 模式下每处理多少个条目输出一次进度。默认 200。
         jsonl_filter: 若提供，读取其中 decision==True 的 uid，仅加载这些样本。
-        max_workers: 并行读取元数据文件的线程数（None 表示自动选择）。
+        max_workers: 并行读取/筛选的线程数（None 表示自动选择）。
         load_multi_level: 若为 True，则仅加载存在 multi_level_loc_dict_<uid>.json 的样本；默认 False（行为不变）。
 
     返回:
@@ -43,7 +43,7 @@ def load(dataset_dir: str, debug: bool = False, progress_every: int = 200, jsonl
         print(f"[load] Scanning dataset_dir: {dataset_dir}", flush=True)
 
     try:
-        # 使用 scandir 获取更快的目录迭代与 is_dir 检查
+        # 使用 scandir 获取更快的目录迭代与 is_dir 检查；entries 将用于并行筛选
         entries_iter = os.scandir(dataset_dir)
         entries = [e for e in entries_iter]
     except Exception as e:
@@ -84,46 +84,55 @@ def load(dataset_dir: str, debug: bool = False, progress_every: int = 200, jsonl
                 print(f"[load] Failed to read jsonl_filter {jsonl_filter}: {e}. Proceeding without filter.", flush=True)
             include_uids = None
 
-    # 预筛选候选样本（只留下目录且文件齐全的样本），再并行读取元数据
-    candidates: List[tuple] = []
-    for idx, dir_entry in enumerate(entries):
-        if not dir_entry.is_dir():
-            continue
+    worker_count = max_workers if max_workers and max_workers > 0 else min(32, (os.cpu_count() or 1) * 2)
 
-        uid = dir_entry.name
+    # 并行执行完整筛选（目录判定 + 文件存在性 + multi-level 可选检查）
+    candidates: List[tuple[str, str, str]] = []
 
-        if include_uids is not None and uid not in include_uids:
-            if debug and (idx % progress_every == 0):
-                print(f"[load] Skipping uid={uid} not in jsonl_filter (idx={idx})", flush=True)
-            continue
+    def check_entry(dir_entry) -> Optional[tuple[str, str, str]]:
+        try:
+            if not dir_entry.is_dir():
+                return None
+            uid = dir_entry.name
+            if include_uids is not None and uid not in include_uids:
+                return None
 
-        image_filename = f"panorama-{uid}.png"
-        meta_filename = f"metadata-{uid}.json"
+            image_filename = f"panorama-{uid}.png"
+            meta_filename = f"metadata-{uid}.json"
+            image_path = os.path.join(dir_entry.path, image_filename)
+            metadata_path = os.path.join(dir_entry.path, meta_filename)
 
-        image_path = os.path.join(dir_entry.path, image_filename)
-        metadata_path = os.path.join(dir_entry.path, meta_filename)
+            if not os.path.isfile(image_path) or not os.path.isfile(metadata_path):
+                return None
 
-        if not os.path.isfile(image_path) or not os.path.isfile(metadata_path):
-            # 跳过不完整样本
-            if debug and (idx % progress_every == 0):
-                print(f"[load] Incomplete sample skipped at idx={idx}, uid={uid}", flush=True)
-            continue
+            if load_multi_level:
+                ml_filename = f"multi_level_loc_dict_{uid}.json"
+                ml_path = os.path.join(dir_entry.path, ml_filename)
+                if not os.path.isfile(ml_path):
+                    return None
 
-        if load_multi_level:
-            # 仅当 multi_level_loc_dict 存在时才纳入
-            ml_filename = f"multi_level_loc_dict_{uid}.json"
-            ml_path = os.path.join(dir_entry.path, ml_filename)
-            if not os.path.isfile(ml_path):
-                if debug and (idx % progress_every == 0):
-                    print(f"[load] Skipping uid={uid} due to missing {ml_filename}", flush=True)
-                continue
-
-        candidates.append((uid, image_path, metadata_path))
+            return (uid, image_path, metadata_path)
+        except Exception as e:
+            if debug:
+                print(f"[load] check_entry exception for {getattr(dir_entry, 'name', '?')}: {e}", flush=True)
+            return None
 
     if debug:
-        print(f"[load] Candidates after pre-filter: {len(candidates)}", flush=True)
+        print(f"[load] Using ThreadPoolExecutor for filtering with max_workers={worker_count}", flush=True)
 
-    # 并行读取 JSON 元数据（I/O 受限，线程池可以显著加速）
+    kept = 0
+    with ThreadPoolExecutor(max_workers=worker_count) as executor:
+        for i, res in enumerate(executor.map(check_entry, entries), 1):
+            if res is not None:
+                candidates.append(res)
+                kept += 1
+            if debug and (i % progress_every == 0 or i == total_entries):
+                print(f"[load] Filter progress {i}/{total_entries} | candidates={kept}", flush=True)
+
+    if debug:
+        print(f"[load] Candidates after parallel filter: {len(candidates)}", flush=True)
+
+    # 并行读取 JSON 元数据（I/O 受限）
     def build_record(item: tuple) -> Optional[Dict[str, Any]]:
         uid, image_path, metadata_path = item
         try:
@@ -144,7 +153,6 @@ def load(dataset_dir: str, debug: bool = False, progress_every: int = 200, jsonl
                 if debug:
                     print(f"[load] Failed to read multi_level_loc_dict for uid={uid}: {e}", flush=True)
                 return None
-            # 确保 metadata['location'] 存在且为字典
             if not isinstance(metadata.get("location"), dict):
                 metadata["location"] = {}
             metadata["location"]["multi_level_loc_dict"] = ml_dict
@@ -157,10 +165,8 @@ def load(dataset_dir: str, debug: bool = False, progress_every: int = 200, jsonl
             "metadata": metadata,
         }
 
-    worker_count = max_workers if max_workers and max_workers > 0 else min(32, (os.cpu_count() or 1) * 2)
-
     if debug:
-        print(f"[load] Using ThreadPoolExecutor with max_workers={worker_count}", flush=True)
+        print(f"[load] Using ThreadPoolExecutor for metadata reads with max_workers={worker_count}", flush=True)
 
     collected = 0
     with ThreadPoolExecutor(max_workers=worker_count) as executor:
@@ -203,4 +209,4 @@ if __name__ == "__main__":
             "image_path": example["image_path"],
             "city": example["city"],
             "metadata_keys": list(example["metadata"].keys()),
-        }, indent=2, ensure_ascii=False)) 
+        }, indent=2, ensure_ascii=False))
