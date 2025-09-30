@@ -286,7 +286,10 @@ def process_cities(
     outdir = pathlib.Path(output_dir)
     ensure_dir(outdir)
 
-    cities = list(city_centers.items())
+    if isinstance(city_centers, dict):
+        cities = list(city_centers.items())
+    else:
+        cities = [(i['city'], i['loc']) for i in city_centers]
     total = len(cities)
 
     if tqdm:

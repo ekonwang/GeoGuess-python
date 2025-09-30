@@ -97,7 +97,8 @@ class GooglePlacesClient:
 
         resp = self.session.get(GOOGLE_PLACES_NEARBY_URL, params=params, timeout=60)
         if self.debug:
-            print(f"[DBG] NearbySearch HTTP {resp.status_code} url(no-key-masked)={resp.url.replace(self.api_key, '***') if self.api_key else resp.url}")
+            # print(f"[DBG] NearbySearch HTTP {resp.status_code} url(no-key-masked)={resp.url.replace(self.api_key, '***') if self.api_key else resp.url}")
+            print(f"[DBG] NearbySearch HTTP {resp.status_code} url(no-key-masked)={resp.url}")
         resp.raise_for_status()
         data = resp.json()
 

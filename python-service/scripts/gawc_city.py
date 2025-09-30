@@ -187,7 +187,7 @@ def scrape_2024(debug=True) -> dict[str, list[str]]:
     print("[7/7] 解析完成。")
     return by_level
 
-def list_gawc_city(threshold: str = "Beta-", strictly_higher: bool = True, debug: bool = True) -> list[str]:
+def list_gawc_city(threshold: str = "Beta-", strictly_higher: bool = False, debug: bool = True) -> list[str]:
     """
     返回“高于 threshold”的城市列表（默认阈值 Beta-，且 **严格高于**）。
     如果你想“含阈值”，把 strictly_higher=False。
