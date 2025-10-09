@@ -57,8 +57,23 @@ DEFAULT_PLACE_TYPES = [
 ]
 
 def parse_latlng(latlng_str: str) -> Tuple[float, float]:
+    """Parse a "lat,lng" string into floats.
+
+    Be tolerant of accidental "lng,lat" ordering: if the first parsed value is not a
+    valid latitude (abs > 90) but swapping yields valid (lat,lng) ranges, return the
+    swapped pair. If neither ordering yields a valid pair, raise ValueError to fail
+    fast with a clear message.
+    """
     lat_str, lng_str = latlng_str.split(",")
-    return float(lat_str.strip()), float(lng_str.strip())
+    a = float(lat_str.strip())
+    b = float(lng_str.strip())
+    # Preferred interpretation: (a,b) as (lat,lng)
+    if -90 <= a <= 90 and -180 <= b <= 180:
+        return a, b
+    # If not valid, try swapped (lng,lat) -> (lat,lng)
+    if -90 <= b <= 90 and -180 <= a <= 180:
+        return b, a
+    raise ValueError(f"Invalid lat,lng string: {latlng_str}")
 
 def ensure_dir(p: pathlib.Path):
     p.mkdir(parents=True, exist_ok=True)
