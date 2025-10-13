@@ -59,23 +59,23 @@ test_google_api
 # 在后台运行 app
 export CITY_SMALL_CACHE_DIR="app/geojson_cache"
 if ! lsof -i:8001 >/dev/null 2>&1; then
-    python -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8001 > app/latest.log 2>&1 &
+    python3 -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8001 > app/latest.log 2>&1 &
     sleep 1
 else
     echo "[INFO] Port 8001 is occupied, killing the process..." >&2
     lsof -ti:8001 | xargs -r kill -9
     sleep 1
-    python -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8001 > app/latest.log 2>&1 &
+    python3 -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8001 > app/latest.log 2>&1 &
     sleep 1
 fi
 
 : "${APP_BASE_URL:=http://localhost:8001}"
 
 
-python "$SCRIPT_DIR/batch_panorama.py" \
+python3 "$SCRIPT_DIR/batch_panorama_1012.py" \
   --app-base-url "$APP_BASE_URL" \
   --google-api-key "$GOOGLE_MAPS_API_KEY" \
   --max-attempts 10 \
-  --num_query 50000 \
-  --batch_out_dir ${MAIN_PROJECT_TEMP}/datasets/google_javascript_maps --concurrency 3
+  --num_query 500 \
+  --batch_out_dir ${MAIN_PROJECT_TEMP}/datasets/google_javascript_maps_diverse_1012 --concurrency 3
   "$@" 

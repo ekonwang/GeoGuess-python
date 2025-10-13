@@ -7,14 +7,22 @@ MAIN_PROJECT_TEMP=$(cd $PROJECT_DIR/../../../.temp && pwd)
 # echo ${MAIN_PROJECT_TEMP}
 
 # activate the gpt-researcher conda environment
-eval "$(conda shell.bash hook)"
-conda activate gpt-researcher
+# eval "$(conda shell.bash hook)"
+# conda activate gpt-researcher
 cd ${PROJECT_DIR}
 
 # 设置 SSL 以及代理
 export SSL_CERT_FILE="$(python -c 'import certifi; print(certifi.where())')"
 export REQUESTS_CA_BUNDLE="$SSL_CERT_FILE"
-export ALL_PROXY=http://127.0.0.1:7890
+# export ALL_PROXY=http://127.0.0.1:7890
+if [[ -n "${https_proxy:-}" || -n "${http_proxy:-}" ]]; then
+    echo "Using existing proxy settings:"
+    echo "http_proxy=${http_proxy:-<not set>}"
+    echo "https_proxy=${https_proxy:-<not set>}"
+else
+    export ALL_PROXY=http://127.0.0.1:7890
+    echo "Using proxy: http://127.0.0.1:7890"
+fi
 
 # 检查 Google Maps API Key 是否设置
 if [[ -z "${GOOGLE_MAPS_API_KEY:-}" ]]; then
@@ -49,4 +57,7 @@ test_google_api
 # cd $(dirname $0)/..
 
 # Use -m to run within package context so relative imports work
-python -m app.make_geojson_cache --cache-dir app/geojson_cache --concurrency 1
+# python -m app.make_geojson_cache --cache-dir app/geojson_cache --concurrency 1
+
+# [这个脚本需要在本地，用家庭宽带的 ip 来跑，不能用服务器的 ip 来跑]
+python3 -m app.make_geojson_cache_1012 --cache-dir app/geojson_cache --concurrency 1
