@@ -60,4 +60,4 @@ test_google_api
 # python -m app.make_geojson_cache --cache-dir app/geojson_cache --concurrency 1
 
 # [这个脚本需要在本地，用家庭宽带的 ip 来跑，不能用服务器的 ip 来跑]
-python3 -m app.make_geojson_cache_1012 --cache-dir app/geojson_cache --concurrency 1
+python -m app.make_geojson_cache_1012 --cache-dir app/geojson_cache --concurrency 1
