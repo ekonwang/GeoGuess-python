@@ -63,10 +63,10 @@ if ! lsof -i:8001 >/dev/null 2>&1; then
     sleep 1
 else
     echo "[INFO] Port 8001 is occupied, killing the process..." >&2
-    lsof -ti:8001 | xargs -r kill -9
-    sleep 1
-    python3 -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8001 > app/latest.log 2>&1 &
-    sleep 1
+    # lsof -ti:8001 | xargs -r kill -9
+    # sleep 1
+    # python3 -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8001 > app/latest.log 2>&1 &
+    # sleep 1
 fi
 
 : "${APP_BASE_URL:=http://localhost:8001}"
